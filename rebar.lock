@@ -29,7 +29,7 @@
  {<<"eper">>,{pkg,<<"eper">>,<<"0.94.0">>},0},
  {<<"erldns">>,
   {git,"https://github.com/dcos/erl-dns.git",
-       {ref,"619036d262f6316e5d3a662a79abbf532b658a2a"}},
+       {ref,"ac32a5d6ef14f3e10813a7f2cd32d3786a6ffff3"}},
   0},
  {<<"erlzk">>,{pkg,<<"erlzk">>,<<"0.6.3">>},0},
  {<<"exometer_core">>,

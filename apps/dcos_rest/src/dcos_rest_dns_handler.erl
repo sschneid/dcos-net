@@ -66,25 +66,26 @@ records_fun() ->
         ok = SendFun("["),
         ZonesV = erldns_zone_cache:zone_names_and_versions(),
         Zones = [Z || {Z, _} <- ZonesV],
-        records_fun(SendFun, [], Zones, 0),
+        records_fun(SendFun, Zones, ""),
         ok = SendFun("]")
     end.
 
-records_fun(_SendFun, [], [], N) ->
-    N;
-records_fun(SendFun, [], [Zone|Zones], N) ->
+records_fun(_SendFun, [], _Sep) ->
+    ok;
+records_fun(SendFun, [Zone|Zones], Sep) ->
     case erldns_zone_cache:get_zone_with_records(Zone) of
-        {ok, #zone{records = Records}} ->
-            records_fun(SendFun, Records, Zones, N);
+        {ok, #zone{records_by_name = Records}} ->
+            Sep0 =
+                maps:fold(fun (_Key, RR, RRSep) ->
+                    lists:foldl(fun (R, RSep) ->
+                        {ok, RSep0} = send_record(SendFun, RSep, R),
+                        RSep0
+                    end, RRSep, RR)
+                end, Sep, Records),
+            records_fun(SendFun, Zones, Sep0);
         {error, zone_not_found} ->
-            records_fun(SendFun, [], Zones, N)
-    end;
-records_fun(SendFun, [Record|Records], Zones, 0) ->
-    {ok, Inc} = send_record(SendFun, "", Record),
-    records_fun(SendFun, Records, Zones, Inc);
-records_fun(SendFun, [Record|Records], Zones, N) ->
-    {ok, Inc} = send_record(SendFun, ",\n", Record),
-    records_fun(SendFun, Records, Zones, N + Inc).
+            records_fun(SendFun, Zones, Sep)
+    end.
 
 reply_halt(StatusCode, Req, State) ->
     {ok, Req0} = cowboy_req:reply(StatusCode, Req),
@@ -93,9 +94,9 @@ reply_halt(StatusCode, Req, State) ->
 send_record(SendFun, Prefix, RR) ->
     try jsx:encode(record_to_term(RR)) of
         Data ->
-            {SendFun([Prefix, Data]), 1}
+            {SendFun([Prefix, Data]), ",\n"}
     catch throw:unknown_record_type ->
-        {ok, 0}
+        {ok, ""}
     end.
 
 -spec handle(dns:query(), binary()) -> dns:message().
