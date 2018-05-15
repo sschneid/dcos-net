@@ -309,6 +309,9 @@ setup(FileName) ->
             Pid ! stream_next
         end),
 
+    meck:new(folsom_metrics, [passthrough]),
+    meck:expect(folsom_metrics, notify, 3, ok),
+
     {ok, _Pid} = dcos_net_mesos_listener:start_link(),
     stream_wait(),
 
@@ -325,6 +328,7 @@ cleanup(_Tasks) ->
     exit(Pid, kill),
     exit(StreamPid, kill),
 
+    meck:unload(folsom_metrics),
     meck:unload(httpc).
 
 stream_wait() ->
