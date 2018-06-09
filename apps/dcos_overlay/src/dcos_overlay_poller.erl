@@ -102,12 +102,13 @@ handle_info(init, []) ->
     {noreply, #state{netlink = Pid}};
 handle_info(poll, State0) ->
     State1 =
-        case poll(State0) of
+        case poll() of
             {error, Reason} ->
                 ok = m_notify({poller, failures}, {inc, 1}, counter),
                 lager:warning("Overlay Poller could not poll: ~p~n", [Reason]),
                 State0#state{poll_period = ?MIN_POLL_PERIOD};
-            {ok, NewState} ->
+            {ok, Data} ->
+                NewState = parse_response(State0, Data),
                 ok = m_notify({poller, responses}, {inc, 1}, counter),
                 NewPollPeriod = update_poll_period(NewState#state.poll_period),
                 NewState#state{poll_period = NewPollPeriod}
@@ -127,44 +128,28 @@ code_change(_OldVsn, State, _Extra) ->
 %%% Internal functions
 %%%===================================================================
 
--spec(request(string(), httpc:headers()) ->
-    {ok, dcos_net_mesos:response()} | {error, Reason :: term()}).
-request(URIPath, Headers) ->
-    Begin = erlang:monotonic_time(millisecond),
-    try
-        dcos_net_mesos:request(URIPath, Headers)
-    after
-        Ms = erlang:monotonic_time(millisecond) - Begin,
-        ok = m_notify({poller, response_ms}, Ms, gauge)
-    end.
-
 update_poll_period(OldPollPeriod) when OldPollPeriod*2 =< ?MAX_POLL_PERIOD ->
     OldPollPeriod*2;
 update_poll_period(_) ->
     ?MAX_POLL_PERIOD.
 
-poll(State0) ->
-    Headers = [{"Accept", "application/json"}],
-    Response = request("/overlay-agent/overlay", Headers),
-    handle_response(State0, Response).
+poll() ->
+    Begin = erlang:monotonic_time(millisecond),
+    try
+        dcos_net_mesos:poll("/overlay-agent/overlay")
+    after
+        Ms = erlang:monotonic_time(millisecond) - Begin,
+        ok = m_notify({poller, response_ms}, Ms, gauge)
+    end.
 
-handle_response(_State0, {error, Reason}) ->
-    {error, Reason};
-handle_response(State0, {ok, {_StatusLine = {_HTTPVersion, 200 = _StatusCode, _ReasonPhrase}, _Headers, Body}}) ->
-    parse_response(State0, Body);
-handle_response(_State0, {ok, {StatusLine, _Headers, _Body}}) ->
-    {error, StatusLine}.
-
-parse_response(State0 = #state{known_overlays = KnownOverlays}, Body) ->
-    AgentInfo = jiffy:decode(Body, [return_maps]),
+parse_response(State0 = #state{known_overlays = KnownOverlays}, AgentInfo) ->
     IP0 = maps:get(<<"ip">>, AgentInfo),
     IP1 = process_ip(IP0),
     State1 = State0#state{ip = IP1},
     Overlays = maps:get(<<"overlays">>, AgentInfo, []),
     ok = m_notify(networks, length(Overlays), gauge),
     NewOverlays = Overlays -- KnownOverlays,
-    State2 = lists:foldl(fun add_overlay/2, State1, NewOverlays),
-    {ok, State2}.
+    lists:foldl(fun add_overlay/2, State1, NewOverlays).
 
 process_ip(IPBin0) ->
     [IPBin1|_MaybePort] = binary:split(IPBin0, <<":">>),
