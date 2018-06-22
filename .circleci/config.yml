@@ -4,12 +4,12 @@ jobs:
     machine: true
     working_directory: '~/dcos-net'
     environment:
-      - OTP_VERSION: "21.0"
-      - OTP_DOWNLOAD_SHA256: "5a2d8e33c39a78a2dcc0c39bf9d2dfdf2974f0fad28385b4ede020a2321d643f"
+      - OTP_VERSION: "20.3.2"
+      - OTP_DOWNLOAD_SHA256: "9809be52baa23d6fd18ee70b9a9b7c548e44f586db2f46ff5bfe66719cfab10a"
     steps:
       - checkout
       - restore_cache:
-          key: otp-build-21.0
+          key: otp-build-20.3.2
       - run:
           name: Building OTP
           command: |
@@ -31,7 +31,7 @@ jobs:
                 && ./configure \
                 && make -j$(getconf _NPROCESSORS_ONLN) )
       - save_cache:
-          key: otp-build-21.0
+          key: otp-build-20.3.2
           paths:
             - ~/src/otp
       - run:
@@ -87,7 +87,7 @@ jobs:
           command: ./rebar3 as test cover
       - run:
           name: Generating cover report
-          command: ./rebar3 as test covertool generate
+          command: ./rebar3 covertool generate
       - run:
           name: Installing codecov
           command: pip install codecov
